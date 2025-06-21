@@ -176,6 +176,50 @@ async def get_stats():
         "uptime": "placeholder"
     }
 
+@app.get("/api/cache/stats")
+async def get_cache_stats():
+    """Get analysis cache statistics to monitor deduplication effectiveness"""
+    try:
+        from services.vulnerability_analyzer import VulnerabilityAnalyzer
+        analyzer = VulnerabilityAnalyzer()
+        
+        cache_stats = analyzer.get_cache_stats()
+        sor_metrics = analyzer.get_sor_performance_metrics()
+        
+        return {
+            "cache_statistics": cache_stats,
+            "sor_performance": sor_metrics,
+            "deduplication_effectiveness": {
+                "requests_saved": cache_stats.get('cache_hits', 0),
+                "cost_saved_usd": cache_stats.get('cache_hits', 0) * 0.01,  # Estimated cost per request
+                "response_time_saved_ms": cache_stats.get('cache_hits', 0) * 2000  # Estimated 2s per LLM call
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error getting cache stats: {str(e)}")
+        return {
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@app.post("/api/cache/clear")
+async def clear_cache():
+    """Clear the analysis cache"""
+    try:
+        from services.vulnerability_analyzer import VulnerabilityAnalyzer
+        analyzer = VulnerabilityAnalyzer()
+        
+        analyzer.clear_analysis_cache()
+        
+        return {
+            "message": "Analysis cache cleared successfully",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Error clearing cache: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/report", response_class=HTMLResponse)
 async def vulnerability_report():
     """HTML vulnerability report dashboard"""
