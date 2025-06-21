@@ -74,20 +74,52 @@ async def analyze_trace_batch(batch_data: TraceBatchData):
     Receive and analyze a batch of traces from Ruby agent
     """
     try:
-        logger.info(f"Received batch {batch_data.batch_id} with {len(batch_data.traces)} traces")
+        logger.info(f"📦 Received batch {batch_data.batch_id} with {len(batch_data.traces)} traces")
+        
+        # Debug: Log detailed batch data
+        batch_dict = batch_data.dict()
+        logger.info(f"🔍 BATCH DATA DETAILS:")
+        logger.info(f"  - Batch ID: {batch_dict['batch_id']}")
+        logger.info(f"  - Timestamp: {batch_dict['timestamp']}")
+        logger.info(f"  - Number of traces: {len(batch_dict['traces'])}")
+        
+        # Log first trace details for debugging
+        if batch_dict['traces']:
+            first_trace = batch_dict['traces'][0]
+            logger.info(f"📋 FIRST TRACE SAMPLE:")
+            logger.info(f"  - Trace ID: {first_trace.get('trace_id', 'missing')}")
+            logger.info(f"  - Request info keys: {list(first_trace.get('request_info', {}).keys())}")
+            logger.info(f"  - Execution trace length: {len(first_trace.get('execution_trace', []))}")
+            
+            # Check for SOR context
+            if 'request_context' in first_trace:
+                logger.info(f"  - ✅ SOR request_context found")
+            else:
+                logger.warning(f"  - ❌ SOR request_context missing")
+                
+            # Check execution trace for SOR context
+            if first_trace.get('execution_trace'):
+                first_exec = first_trace['execution_trace'][0]
+                if 'execution_context' in first_exec:
+                    logger.info(f"  - ✅ SOR execution_context found")
+                else:
+                    logger.warning(f"  - ❌ SOR execution_context missing")
+                    
+                if 'resource_context' in first_exec:
+                    logger.info(f"  - ✅ SOR resource_context found")
+                else:
+                    logger.warning(f"  - ❌ SOR resource_context missing")
         
         # Store batch for reference
-        trace_batches[batch_data.batch_id] = batch_data.dict()
+        trace_batches[batch_data.batch_id] = batch_dict
         
         # Initialize vulnerability analyzer
         from services.vulnerability_analyzer import VulnerabilityAnalyzer
         analyzer = VulnerabilityAnalyzer()
         
-        # Convert traces to dict format for analysis
-        traces_for_analysis = [trace.dict() for trace in batch_data.traces]
-        
-        # Perform LLM-based vulnerability analysis
-        results = await analyzer.analyze_batch(traces_for_analysis)
+        # Use SOR-enabled analyze_batch method with trace_batch format
+        logger.info(f"🚀 Starting SOR-enhanced vulnerability analysis...")
+        results = await analyzer.analyze_batch(batch_dict)
         
         # Store results
         analysis_results[batch_data.batch_id] = results
