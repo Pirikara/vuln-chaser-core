@@ -1,13 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
 import logging
 from datetime import datetime
-import uuid
-import json
 
 # Configure logging
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -44,14 +42,25 @@ class TraceBatchData(BaseModel):
     traces: List[TraceData]
 
 class VulnerabilityResult(BaseModel):
-    owasp_category: str
-    type: str
+    # Pattern-Free fields (new format)
+    vulnerability_classification: Optional[str] = None
     severity: str
     confidence: float
-    affected_method: str
-    line: int
-    description: str
-    recommendation: str
+    affected_component: Optional[str] = None
+    creative_description: Optional[str] = None
+    attack_scenario: Optional[str] = None
+    business_impact: Optional[str] = None
+    novel_aspects: Optional[str] = None
+    remediation_strategy: Optional[str] = None
+    sor_relationship: Optional[str] = None
+    
+    # Legacy fields (backward compatibility)
+    owasp_category: Optional[str] = None
+    type: Optional[str] = None
+    affected_method: Optional[str] = None
+    line: Optional[int] = None
+    description: Optional[str] = None
+    recommendation: Optional[str] = None
 
 class BatchAnalysisResponse(BaseModel):
     batch_id: str
@@ -74,41 +83,9 @@ async def analyze_trace_batch(batch_data: TraceBatchData):
     Receive and analyze a batch of traces from Ruby agent
     """
     try:
-        logger.info(f"📦 Received batch {batch_data.batch_id} with {len(batch_data.traces)} traces")
+        logger.info(f"Received batch {batch_data.batch_id} with {len(batch_data.traces)} traces")
         
-        # Debug: Log detailed batch data
         batch_dict = batch_data.dict()
-        logger.info(f"🔍 BATCH DATA DETAILS:")
-        logger.info(f"  - Batch ID: {batch_dict['batch_id']}")
-        logger.info(f"  - Timestamp: {batch_dict['timestamp']}")
-        logger.info(f"  - Number of traces: {len(batch_dict['traces'])}")
-        
-        # Log first trace details for debugging
-        if batch_dict['traces']:
-            first_trace = batch_dict['traces'][0]
-            logger.info(f"📋 FIRST TRACE SAMPLE:")
-            logger.info(f"  - Trace ID: {first_trace.get('trace_id', 'missing')}")
-            logger.info(f"  - Request info keys: {list(first_trace.get('request_info', {}).keys())}")
-            logger.info(f"  - Execution trace length: {len(first_trace.get('execution_trace', []))}")
-            
-            # Check for SOR context
-            if 'request_context' in first_trace:
-                logger.info(f"  - ✅ SOR request_context found")
-            else:
-                logger.warning(f"  - ❌ SOR request_context missing")
-                
-            # Check execution trace for SOR context
-            if first_trace.get('execution_trace'):
-                first_exec = first_trace['execution_trace'][0]
-                if 'execution_context' in first_exec:
-                    logger.info(f"  - ✅ SOR execution_context found")
-                else:
-                    logger.warning(f"  - ❌ SOR execution_context missing")
-                    
-                if 'resource_context' in first_exec:
-                    logger.info(f"  - ✅ SOR resource_context found")
-                else:
-                    logger.warning(f"  - ❌ SOR resource_context missing")
         
         # Store batch for reference
         trace_batches[batch_data.batch_id] = batch_dict
@@ -118,7 +95,6 @@ async def analyze_trace_batch(batch_data: TraceBatchData):
         analyzer = VulnerabilityAnalyzer()
         
         # Use SOR-enabled analyze_batch method with trace_batch format
-        logger.info(f"🚀 Starting SOR-enhanced vulnerability analysis...")
         results = await analyzer.analyze_batch(batch_dict)
         
         # Store results
@@ -234,11 +210,14 @@ async def vulnerability_report():
             .header { text-align: center; color: #333; border-bottom: 2px solid #e74c3c; padding-bottom: 10px; }
             .stats { display: flex; justify-content: space-around; margin: 20px 0; }
             .stat-box { background: #3498db; color: white; padding: 20px; border-radius: 5px; text-align: center; }
-            .vulnerability { background: #fff; border-left: 4px solid #e74c3c; margin: 10px 0; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            .vulnerability { background: #fff; border-left: 4px solid #e74c3c; margin: 10px 0; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 5px; }
             .vulnerability.high { border-color: #c0392b; }
             .vulnerability.medium { border-color: #f39c12; }
             .vulnerability.low { border-color: #f1c40f; }
-            .vulnerability.critical { border-color: #8e44ad; }
+            .vulnerability.critical { border-color: #8e44ad; background: #fdf2f8; }
+            .vulnerability h4 { color: #2c3e50; margin-top: 0; }
+            .vulnerability p { margin: 8px 0; line-height: 1.4; }
+            .vulnerability strong { color: #34495e; }
             .batch { margin: 20px 0; padding: 15px; background: #ecf0f1; border-radius: 5px; }
             .no-data { text-align: center; color: #7f8c8d; padding: 40px; }
         </style>
@@ -284,17 +263,48 @@ async def vulnerability_report():
                     
                     for vuln in vulnerabilities:
                         severity = vuln.get("severity", "unknown").lower()
+                        
+                        # Support both old and new field formats
+                        classification = vuln.get("vulnerability_classification", vuln.get("type", "Unknown Vulnerability"))
+                        description = vuln.get("creative_description", vuln.get("description", "No description available"))
+                        affected_component = vuln.get("affected_component", vuln.get("affected_method", "Unknown"))
+                        remediation = vuln.get("remediation_strategy", vuln.get("recommendation", "No recommendation available"))
+                        attack_scenario = vuln.get("attack_scenario", "")
+                        business_impact = vuln.get("business_impact", "")
+                        novel_aspects = vuln.get("novel_aspects", "")
+                        
                         html_content += f'''
                         <div class="vulnerability {severity}">
-                            <h4>{vuln.get("type", "Unknown Vulnerability")}</h4>
+                            <h4>{classification}</h4>
                             <p><strong>Severity:</strong> {vuln.get("severity", "Unknown").upper()}</p>
                             <p><strong>Confidence:</strong> {vuln.get("confidence", 0):.1%}</p>
-                            <p><strong>OWASP Category:</strong> {vuln.get("owasp_category", "Unknown")}</p>
-                            <p><strong>Affected Method:</strong> {vuln.get("affected_method", "Unknown")}</p>
-                            <p><strong>Description:</strong> {vuln.get("description", "No description available")}</p>
-                            <p><strong>Recommendation:</strong> {vuln.get("recommendation", "No recommendation available")}</p>
-                        </div>
-                        '''
+                            <p><strong>Affected Component:</strong> {affected_component}</p>
+                            <p><strong>Description:</strong> {description}</p>'''
+                        
+                        if attack_scenario:
+                            html_content += f'<p><strong>Attack Scenario:</strong> {attack_scenario}</p>'
+                        
+                        if business_impact:
+                            html_content += f'<p><strong>Business Impact:</strong> {business_impact}</p>'
+                        
+                        if novel_aspects:
+                            html_content += f'<p><strong>Novel Aspects:</strong> {novel_aspects}</p>'
+                            
+                        html_content += f'<p><strong>Remediation Strategy:</strong> {remediation}</p>'
+                        
+                        # Add SOR context if available
+                        if vuln.get("sor_relationship"):
+                            html_content += f'<p><strong>SOR Relationship:</strong> {vuln["sor_relationship"]}</p>'
+                        
+                        # Add Pattern-Free analysis context
+                        if vuln.get("vuln_chaser_context"):
+                            context = vuln["vuln_chaser_context"]
+                            if context.get("pattern_free_analysis"):
+                                pf_analysis = context["pattern_free_analysis"]
+                                if pf_analysis.get("creative_risk_assessment", {}).get("novel_risks_identified"):
+                                    html_content += f'<p><strong>Pattern-Free Analysis:</strong> {pf_analysis["creative_risk_assessment"]["novel_risks_identified"][:200]}...</p>'
+                        
+                        html_content += '</div>'
             
             if not has_vulns:
                 html_content += '<p style="color: green;">✅ No vulnerabilities detected in this batch</p>'

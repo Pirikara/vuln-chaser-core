@@ -6,7 +6,7 @@ Coordinates all SOR components to provide comprehensive security analysis
 import asyncio
 import logging
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 
 from .subject_analyzer import SubjectAnalyzer
 from .operation_classifier import OperationClassifier
@@ -61,18 +61,7 @@ class SORAnalysisEngine:
             traces = trace_batch.get('traces', [])
             results = []
             
-            logger.info(f"🔬 Starting SOR analysis for {len(traces)} traces")
-            
-            # Debug: Check if traces have SOR context
-            if traces:
-                first_trace = traces[0]
-                logger.info(f"🔍 SOR TRACE CHECK:")
-                logger.info(f"  - Has request_context: {'request_context' in first_trace}")
-                logger.info(f"  - Has execution_trace: {'execution_trace' in first_trace}")
-                if first_trace.get('execution_trace'):
-                    first_exec = first_trace['execution_trace'][0]
-                    logger.info(f"  - Has execution_context: {'execution_context' in first_exec}")
-                    logger.info(f"  - Has resource_context: {'resource_context' in first_exec}")
+            logger.info(f"Starting SOR analysis for {len(traces)} traces")
             
             if not traces:
                 logger.warning("⚠️ No traces to analyze")
@@ -199,6 +188,7 @@ class SORAnalysisEngine:
             
             return {
                 'trace_id': trace_id,
+                'execution_trace': execution_traces,  # Include execution_trace for vulnerability analysis
                 'sor_analysis': {
                     'subject': subject_analysis,
                     'operations': operation_analyses,
@@ -222,8 +212,9 @@ class SORAnalysisEngine:
     
     async def _analyze_operation(self, method_info: Dict[str, Any], source_code: str, 
                                execution_context: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze Operation using OperationClassifier"""
-        return self.operation_classifier.analyze(method_info, source_code, execution_context)
+        """Analyze Operation using Pattern-Free OperationCollector"""
+        method_name = method_info.get('name', '')
+        return self.operation_classifier.collect_operation_data(method_name, source_code, execution_context)
     
     async def _analyze_resource(self, parameters: Dict[str, Any], source_code: str, 
                               resource_context: Dict[str, Any]) -> Dict[str, Any]:

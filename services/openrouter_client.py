@@ -23,7 +23,7 @@ class OpenRouterClient:
         payload = {
             "model": self.model,
             "messages": messages,
-            "max_tokens": kwargs.get("max_tokens", 2000),
+            "max_tokens": kwargs.get("max_tokens", 8000),  # Increased for Pattern-Free analysis
             "temperature": kwargs.get("temperature", 0.1),
             "top_p": kwargs.get("top_p", 0.9),
         }
